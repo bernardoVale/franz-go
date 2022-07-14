@@ -166,13 +166,20 @@ func (cl *Client) LeaveGroup() {
 		return
 	}
 
+	cl.cfg.logger.Log(LogLevelInfo, "waitAndAddRebalance")
 	c.waitAndAddRebalance()
+	cl.cfg.logger.Log(LogLevelInfo, "waitAndAddRebalance.Lock")
 	c.mu.Lock() // lock for assign
+	cl.cfg.logger.Log(LogLevelInfo, "assignPartitions")
 	c.assignPartitions(nil, assignInvalidateAll, noTopicsPartitions, "invalidating all assignments in LeaveGroup")
+	cl.cfg.logger.Log(LogLevelInfo, "c.g.leave")
 	wait := c.g.leave()
+	cl.cfg.logger.Log(LogLevelInfo, "waitAndAddRebalance.Unlock")
 	c.mu.Unlock()
+	cl.cfg.logger.Log(LogLevelInfo, "unaddRebalance")
 	c.unaddRebalance()
 
+	cl.cfg.logger.Log(LogLevelInfo, "wait")
 	wait() // wait after we unlock
 }
 
