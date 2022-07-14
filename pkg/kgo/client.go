@@ -567,7 +567,9 @@ func (cl *Client) updateBrokers(brokers []kmsg.MetadataResponseBroker) {
 // OnPartitionsRevoked, you must manually commit offsets before closing the
 // client.
 func (cl *Client) Close() {
+	cl.cfg.logger.Log(LogLevelInfo, "starting leave group")
 	cl.LeaveGroup()
+	cl.cfg.logger.Log(LogLevelInfo, "done leave group")
 	// After LeaveGroup, consumers cannot consume anymore. LeaveGroup
 	// internally assigns noTopicsPartitions, which uses noConsumerSession,
 	// which prevents loopFetch from starting. Assigning also waits for the
@@ -576,34 +578,44 @@ func (cl *Client) Close() {
 	// Now we kill the client context and all brokers, ensuring all
 	// requests fail. This will finish all producer callbacks and
 	// stop the metadata loop.
+	cl.cfg.logger.Log(LogLevelInfo, "ctxCancel")
 	cl.ctxCancel()
+	cl.cfg.logger.Log(LogLevelInfo, "brokersMu.Lock")
 	cl.brokersMu.Lock()
 	cl.stopBrokers = true
 	for _, broker := range cl.brokers {
 		broker.stopForever()
 	}
+	cl.cfg.logger.Log(LogLevelInfo, "brokersMu.Unlock")
 	cl.brokersMu.Unlock()
+	cl.cfg.logger.Log(LogLevelInfo, "broker.stopForever/seed")
 	for _, broker := range cl.seeds {
 		broker.stopForever()
 	}
+
+	cl.cfg.logger.Log(LogLevelInfo, "wait for metadone")
 
 	// Wait for metadata to quit so we know no more erroring topic
 	// partitions will be created. After metadata has quit, we can
 	// safely stop sinks and sources, as no more will be made.
 	<-cl.metadone
 
+	cl.cfg.logger.Log(LogLevelInfo, "sinksAndSources")
 	for _, sns := range cl.sinksAndSources {
 		sns.sink.maybeDrain()     // awaken anything in backoff
 		sns.source.maybeConsume() // same
 	}
 
+	cl.cfg.logger.Log(LogLevelInfo, "failBufferedRecords")
 	cl.failBufferedRecords(ErrClientClosed)
 
 	// We need one final poll: if any sources buffered a fetch, then the
 	// manageFetchConcurrency loop only exits when all fetches have been
 	// drained, because draining a fetch is what decrements an "active"
 	// fetch. PollFetches with `nil` is instant.
+	cl.cfg.logger.Log(LogLevelInfo, "PollFetches.nil")
 	cl.PollFetches(nil)
+	cl.cfg.logger.Log(LogLevelInfo, "PollFetches.nil done")
 }
 
 // Request issues a request to Kafka, waiting for and returning the response.
